@@ -11,6 +11,8 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <string>
+#include <sys/poll.h>
+#include <vector>
 
 void	msg_parser(std::string msg);
 

@@ -1,16 +1,10 @@
 #include "server.hpp"
 
-
 int	main(){
 	int				listen_fd, new_socket;
 	sockaddr_in		address;
 	int				ns;
-	struct pollfd	fds[200];
-	int				nfds = 1, current_size = 0, i;
-	bool			end_server = false;
-	char			buffer[512];
-	int				val_read;
-
+	char			buffer[4097];
 
 	if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1){
 		std::cout << "Error\n";
@@ -23,58 +17,51 @@ int	main(){
 		std::cout << "Error, failed to bind\n";
 		exit(EXIT_FAILURE);
 	}
-	if (listen(listen_fd, 1) < 0){
+	if (listen(listen_fd, 100) < 0){
 		std::cout << "Error, failed to listen on socket\n";
 		exit(EXIT_FAILURE);
 	}
 	int addrlen = sizeof(address);
-	memset(fds, 0 , sizeof(fds));
-	fds[0].fd = listen_fd;
-	fds[0].events = POLLIN|POLLOUT;
-	while (!end_server){
-		ns = poll(fds, nfds, 20 * 1000);
+	std::vector<pollfd> poll_fds;
+	poll_fds.push_back((pollfd){.fd = listen_fd, .events = POLLIN|POLLOUT});
+	while (42){
+		// check for potential read/write/accept
+		ns = poll(poll_fds.data(), poll_fds.size(), 100);
 		if (ns < 0){
 			std::cout << "Poll failed\n";
 			break;
 		}
-		else if (ns == 0){
-			std::cout << "Poll timed out\n";
-			break;
-		}
-		current_size = nfds;
-		for (i = 0 ; i < current_size ; i++){
-			if(fds[i].revents == 0)
-				continue;
-			if(!(fds[i].revents & (POLLIN|POLLOUT)))
-			{
-				std::cout << "Error, revents : " << fds[i].revents << std::endl;
-				end_server = true;
-				break;
+		else if (ns == 0)
+			continue;
+		else if (poll_fds[0].revents & POLLIN){
+			new_socket = accept(listen_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+			if (new_socket < 0){
+				std::cout << "Error, failed to grab connection\n";
+				exit(EXIT_FAILURE);
 			}
-			if (fds[i].fd == listen_fd){
-				while (new_socket != -1){
-					if ((new_socket = accept(listen_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0){
-						std::cout << "Error, failed to grab connection\n";
-						exit(EXIT_FAILURE);
-					}
-					fds[i].fd = new_socket;
-					fds[i].events = POLLIN|POLLOUT;
-					i++;
+			poll_fds.push_back((pollfd){.fd = new_socket, .events = POLLIN|POLLOUT, .revents = 0});
+		}
+		std::vector<pollfd>::iterator it = poll_fds.begin() + 1;
+		while (it != poll_fds.end()){
+			if (it->revents & POLLIN){
+				int result = 1;
+				memset(buffer, 0, 4097);
+				result = read(it->fd, buffer, 4096);
+				std::cout << buffer << std::endl;
+				if (result < 0)
+					std::cout << "couldn't read from socket\n";
+				else if (result == 0){
+					close(it->fd);
+					it = poll_fds.erase(it);
+					continue;
+				}
+				else if (result && it->revents & POLLOUT){
+					std::string str = "thank's for the talk\n";
+					send(it->fd, str.data(), str.size(), 0);
 				}
 			}
-			else {
-
-			}
+			it++;
 		}
-		fcntl(new_socket, F_SETFL, O_NONBLOCK);
-		val_read = read(new_socket, buffer, 512);
-		std::cout << "THE MESSAGE : " << buffer << std::endl;
-		std::string str = "thank's for the talk\n";
-		send(new_socket, str.data(), str.size(), 0);
 	}
-
-	close(new_socket);
-	close(listen_fd);
-
 	return 0;
 }
