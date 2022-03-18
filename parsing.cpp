@@ -8,23 +8,21 @@ void	msg_parser(std::string msg){
 	std::vector<std::string>	params;
 	int							len = msg.size();
 
-	if (msg[i] == ':'){
-		while (i < len && msg[i] != ' ')
-			i++;
-		while (i < len && msg[i] == ' ')
-			i++;
-	}
-	start = i;
-	while (i < len && msg[i] != ' ')
-		i++;
-	cmd = msg.substr(start, i - start);
 	while (i < len){
 		while (i < len && msg[i] == ' ')
 			i++;
 		start = i;
-		while (i < len && msg[i] != ' ')
-			i++;
-		if (i > start)
+		if (i < len && msg[i] == ':' && cmd.size() > 0){
+			while (i < len)
+				i++;
+		}
+		else {
+			while (i < len && msg[i] != ' ')
+				i++;
+		}
+		if (i > start && cmd.size() == 0)
+			cmd = msg.substr(start, i - start);
+		else if (i > start)
 			params.push_back(msg.substr(start, i - start));
 	}
 }

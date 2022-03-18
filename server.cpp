@@ -1,10 +1,49 @@
 #include "server.hpp"
+#include <algorithm>
+#include <sstream>
+#include <vector>
+#include <map>
+#include <utility>
+
+
+void find_msg(std::map<int, struct content > *mamap, int fd, char *msg){
+	int											i = 0;
+	std::string									tmp(msg);
+	int											limit = -1;
+	std::map<int, struct content >::iterator	it = mamap->find(fd);
+
+	while (i < tmp.size()){
+		if (tmp[i] == '\r' && tmp[i+1] && tmp[i+1] == '\n'){
+			if (mamap->find(fd) == mamap->end()){
+				mamap->insert(std::make_pair(fd, content()));
+				
+			}
+			else {
+
+			}
+			break ;
+		}
+		else if (tmp[i] == '\r' && i == tmp.size() - 1){
+			
+			break ;
+		}
+		
+		i++;
+	}
+	if (limit == -1){
+
+	}
+
+
+
+}
 
 int	main(){
-	int				listen_fd, new_socket;
-	sockaddr_in		address;
-	int				ns;
-	char			buffer[4097];
+	int					listen_fd, new_socket;
+	sockaddr_in			address;
+	int					ns;
+	char				buffer[4097];
+	std::map<int, struct content > mamap;
 
 	if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1){
 		std::cout << "Error\n";
@@ -42,11 +81,13 @@ int	main(){
 			poll_fds.push_back((pollfd){.fd = new_socket, .events = POLLIN|POLLOUT, .revents = 0});
 		}
 		std::vector<pollfd>::iterator it = poll_fds.begin() + 1;
+		
 		while (it != poll_fds.end()){
 			if (it->revents & POLLIN){
 				int result = 1;
 				memset(buffer, 0, 4097);
 				result = read(it->fd, buffer, 4096);
+				find_msg(&mamap, it->fd, buffer);
 				std::cout << buffer << std::endl;
 				if (result < 0)
 					std::cout << "couldn't read from socket\n";
