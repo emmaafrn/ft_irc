@@ -10,12 +10,11 @@ void find_msg(std::map<int, struct content > *mamap, int fd, char *msg){
 	int											i = 0;
 	std::string									tmp(msg);
 	int											limit = -1;
-	std::map<int, struct content >::iterator	it = mamap->find(fd);
+	std::map<int, struct content >::iterator	it;
 
 	while (i < tmp.size()){
 		if (tmp[i] == '\r' && tmp[i+1] && tmp[i+1] == '\n'){
 			if (mamap->find(fd) == mamap->end()){
-				mamap->insert(std::make_pair(fd, content()));
 				
 			}
 			else {
@@ -26,6 +25,17 @@ void find_msg(std::map<int, struct content > *mamap, int fd, char *msg){
 		else if (tmp[i] == '\r' && i == tmp.size() - 1){
 			
 			break ;
+		}
+		else {
+			if (mamap->find(fd) == mamap->end()){
+				mamap->insert(std::make_pair(fd, content()));
+				it = mamap->find(fd);
+				it->second.ss << tmp.substr(0, i);
+
+			}
+			else {
+
+			}
 		}
 		
 		i++;
