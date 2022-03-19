@@ -6,46 +6,36 @@
 #include <utility>
 
 
-void find_msg(std::map<int, struct content > *mamap, int fd, char *msg){
+std::string find_msg(std::map<int, struct content > *mamap, int fd, char *msg){
 	int											i = 0;
 	std::string									tmp(msg);
-	int											limit = -1;
-	std::map<int, struct content >::iterator	it;
+	std::map<int, struct content >::iterator	it = mamap->find(fd);
+	int											size = tmp.size();
 
-	while (i < tmp.size()){
-		if (tmp[i] == '\r' && tmp[i+1] && tmp[i+1] == '\n'){
-			if (mamap->find(fd) == mamap->end()){
-				
-			}
-			else {
-
-			}
-			break ;
+	while (i < size){
+		if ((tmp[i] == '\r' && tmp[i+1] && tmp[i+1] == '\n')
+			|| (tmp[i] == '\n' && it->second.r)){
+			if (it == mamap->end())
+				mamap->insert(std::make_pair(fd, content()));
+			it = mamap->find(fd);
+			it->second.r = false;
+			it->second.buff += tmp.substr(0, i);
+			tmp = it->second.buff;
+			i += 2;
+			return tmp;
 		}
 		else if (tmp[i] == '\r' && i == tmp.size() - 1){
-			
-			break ;
-		}
-		else {
-			if (mamap->find(fd) == mamap->end()){
+			if (it == mamap->end()){
 				mamap->insert(std::make_pair(fd, content()));
-				it = mamap->find(fd);
-				it->second.ss << tmp.substr(0, i);
-
-			}
-			else {
-
-			}
+			it = mamap->find(fd);
+			it->second.r = true;
+			it->second.buff = tmp.substr(0, size - i);
+			
+			
 		}
-		
 		i++;
 	}
-	if (limit == -1){
-
-	}
-
-
-
+	return tmp;
 }
 
 int	main(){
