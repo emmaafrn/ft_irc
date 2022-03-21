@@ -6,36 +6,32 @@
 #include <utility>
 
 
-std::string find_msg(std::map<int, struct content > *mamap, int fd, char *msg){
-	int											i = 0;
-	std::string									tmp(msg);
-	std::map<int, struct content >::iterator	it = mamap->find(fd);
-	int											size = tmp.size();
+std::string find_msg(std::map<int, content > *mamap, int fd, char *msg){
+	int									i = 0;
+	std::string							tmp(msg);
+	std::map<int, content >::iterator	it = mamap->find(fd);
+	int									size = tmp.size();
 
 	while (i < size){
-		if ((tmp[i] == '\r' && tmp[i+1] && tmp[i+1] == '\n')
-			|| (tmp[i] == '\n' && it->second.r)){
+		if ((tmp[i] == '\r' && tmp[i + 1] && tmp[i + 1] == '\n')
+			|| (tmp[i] == '\n' && it != mamap->end() && it->second.r)){
 			if (it == mamap->end())
-				mamap->insert(std::make_pair(fd, content()));
-			it = mamap->find(fd);
-			it->second.r = false;
+				return tmp;
 			it->second.buff += tmp.substr(0, i);
 			tmp = it->second.buff;
-			i += 2;
 			return tmp;
-		}
-		else if (tmp[i] == '\r' && i == tmp.size() - 1){
-			if (it == mamap->end()){
-				mamap->insert(std::make_pair(fd, content()));
-			it = mamap->find(fd);
-			it->second.r = true;
-			it->second.buff = tmp.substr(0, size - i);
-			
-			
 		}
 		i++;
 	}
-	return tmp;
+	if (it == mamap->end())
+		mamap->insert(std::make_pair(fd, content()));
+	it = mamap->find(fd);
+	it->second.buff += tmp.substr(0, size);
+	if (tmp[size - 1] == '\r')
+		it->second.r = true;
+	else
+		it->second.r = false;
+	return "";
 }
 
 int	main(){
@@ -81,13 +77,14 @@ int	main(){
 			poll_fds.push_back((pollfd){.fd = new_socket, .events = POLLIN|POLLOUT, .revents = 0});
 		}
 		std::vector<pollfd>::iterator it = poll_fds.begin() + 1;
-		
 		while (it != poll_fds.end()){
 			if (it->revents & POLLIN){
 				int result = 1;
 				memset(buffer, 0, 4097);
 				result = read(it->fd, buffer, 4096);
-				find_msg(&mamap, it->fd, buffer);
+				std::string str;
+				if (!(str = find_msg(&mamap, it->fd, buffer)).empty())
+					msg_parser(str, it->fd);
 				std::cout << buffer << std::endl;
 				if (result < 0)
 					std::cout << "couldn't read from socket\n";

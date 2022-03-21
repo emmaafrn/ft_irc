@@ -16,11 +16,11 @@
 #include <vector>
 
 struct	content{
-	std::stringstream	ss;
-	bool				r;
+	bool		r;
+	std::string	buff;
 };
 
-void	msg_parser(std::string msg);
+void	msg_parser(std::string msg, int fd);
 
 
 #endif
