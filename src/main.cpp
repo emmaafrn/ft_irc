@@ -1,37 +1,54 @@
-#include "server.hpp"
+#include <emma/parsing.hpp>
+
 #include <algorithm>
 #include <sstream>
 #include <vector>
 #include <map>
 #include <utility>
+#include <iostream>
 
+#include <internal/Server.hpp>
 
-std::string find_msg(std::map<int, content > *mamap, int fd, char *msg){
+void find_msg(std::map<int, content > *mamap, int fd, char *msg, internal::ServerPtr server){
 	int									i = 0;
 	std::string							tmp(msg);
 	std::map<int, content >::iterator	it = mamap->find(fd);
 	int									size = tmp.size();
+	int									start = 0;
 
 	while (i < size){
 		if ((tmp[i] == '\r' && tmp[i + 1] && tmp[i + 1] == '\n')
 			|| (tmp[i] == '\n' && it != mamap->end() && it->second.r)){
-			if (it == mamap->end())
-				return tmp;
+			if (it == mamap->end()){
+				msg_parser(tmp.substr(start, i), fd, server);
+				if (tmp[i] && tmp[i] == '\r')
+				i++;
+				if (tmp[i] && tmp[i] == '\n')
+					i++;
+				start = i;
+				continue ;
+			}
 			it->second.buff += tmp.substr(0, i);
 			tmp = it->second.buff;
-			return tmp;
+			msg_parser(tmp.substr(start, i), fd, server);
+			if (tmp[i] && tmp[i] == '\r')
+				i++;
+			if (tmp[i] && tmp[i] == '\n')
+				i++;
+			start = i;
+			continue ;
 		}
-		i++;
+		else
+			i++;
 	}
 	if (it == mamap->end())
 		mamap->insert(std::make_pair(fd, content()));
 	it = mamap->find(fd);
-	it->second.buff += tmp.substr(0, size);
+	it->second.buff += tmp.substr(start, size);
 	if (tmp[size - 1] == '\r')
 		it->second.r = true;
 	else
 		it->second.r = false;
-	return "";
 }
 
 int	main(){
@@ -40,6 +57,7 @@ int	main(){
 	int					ns;
 	char				buffer[4097];
 	std::map<int, struct content > mamap;
+	internal::Server server("POUPOU", NULL);
 
 	if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1){
 		std::cout << "Error\n";
@@ -83,8 +101,7 @@ int	main(){
 				memset(buffer, 0, 4097);
 				result = read(it->fd, buffer, 4096);
 				std::string str;
-				if (!(str = find_msg(&mamap, it->fd, buffer)).empty())
-					msg_parser(str, it->fd);
+				find_msg(&mamap, it->fd, buffer, &server);
 				std::cout << buffer << std::endl;
 				if (result < 0)
 					std::cout << "couldn't read from socket\n";

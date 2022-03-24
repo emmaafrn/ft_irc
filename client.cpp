@@ -10,8 +10,9 @@
 int	main(int argc, char **argv){
 	int sock = 0, valread;
     struct sockaddr_in serv_addr;
-    std::string hello = "Hello from client";
+    std::string hello = "Hello from client\r\nyep\r\n";
     char buffer[1024] = {0};
+
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
         printf("\n Socket creation error \n");

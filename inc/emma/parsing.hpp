@@ -14,13 +14,14 @@
 #include <string>
 #include <sys/poll.h>
 #include <vector>
+#include <internal/Server.hpp>
 
 struct	content{
 	bool		r;
 	std::string	buff;
 };
 
-void	msg_parser(std::string msg, int fd);
+void	msg_parser(std::string msg, int fd, internal::ServerPtr server);
 
 
 #endif

@@ -1,13 +1,16 @@
-#include "server.hpp"
+#include <emma/parsing.hpp>
+
 #include <vector>
 
-void	msg_parser(std::string msg){
+void	msg_parser(std::string msg, int fd, internal::ServerPtr server){
 	size_t						i = 0;
 	size_t						start = 0;
 	std::string					cmd;
 	std::vector<std::string>	params;
-	int							len = msg.size();
+	size_t						len = msg.size();
 
+	if (!len)
+		return ;
 	while (i < len){
 		while (i < len && msg[i] == ' ')
 			i++;
@@ -25,4 +28,5 @@ void	msg_parser(std::string msg){
 		else if (i > start)
 			params.push_back(msg.substr(start, i - start));
 	}
+	server->admitMessage(fd, cmd, params);
 }
