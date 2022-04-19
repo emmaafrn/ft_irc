@@ -15,11 +15,15 @@ namespace internal {
 	class Server {
 	private:
 		typedef std::map<int, data::UserPtr> userStorage;
+		typedef std::map<std::string, data::ChannelPtr> channelStorage;
 
 		std::string mPassword;
 		api::IComm *mCommInterface;
 		userStorage mUsers;
-		std::map<std::string, data::ChannelPtr> mChannels;
+		channelStorage mChannels;
+
+		std::size_t mJokeCounter;
+		std::vector<std::string> mJokes;
 
 	public:
 		Server();
@@ -32,8 +36,11 @@ namespace internal {
 		data::UserPtr addUser(int fd);
 		bool removeUser(int fd);
 
+		static std::string getHost();
+
 		std::string getPassword() const;
 		data::UserPtr getUser(int fd) const;
+		data::UserPtr getUser(std::string nickname) const;
 		data::ChannelPtr getChannel(std::string name) const;
 
 		data::ChannelPtr getOrCreateChannel(std::string name);
@@ -47,26 +54,21 @@ namespace internal {
 
 		bool admitMessage(int fd, std::string command, std::vector<std::string> params = std::vector<std::string>());
 
-	private:
+		bool sendNumericReply(data::UserPtr user, std::string code, std::string param) const;
+		bool sendNumericReply(data::UserPtr user, std::string code, std::vector<std::string> params) const;
+		bool sendMessage(data::UserPtr user, util::Optional<internal::Origin> prefix, std::string command, std::string params, bool lastParamExtended = false) const;
+		bool sendMessage(data::UserPtr user, util::Optional<internal::Origin> prefix, std::string command, std::vector<std::string> params = std::vector<std::string>(), bool lastParamExtended = false) const;
 
-		bool requiresParam(int fd, std::string command, std::vector<std::string> params, std::size_t count);
-		bool sendError(int fd, std::string errorCode, std::vector<std::string> params) const;
+		std::string &nextJoke();
+
+	private:
+		bool requiresParam(data::UserPtr user, std::string command, std::vector<std::string> params, std::size_t count);
 
 		bool tryToAuthenticate(data::UserPtr user);
 
-		bool handleLUsers(int fd) const;
+		bool handleLUsers(data::UserPtr user) const;
 
 		bool handleMode(data::UserPtr user, std::vector<std::string> params);
-
-		template<typename _Tp>
-		void genericHandleMode(data::UserPtr user, _Tp *target, std::vector<std::string> params) {
-			// typedef typename _Tp::Mode Mode;
-
-			if (params.size() == 1) {
-				util::sendNumericReply(getCommInterface(), user, "221", util::makeVector("+" + target->getModeString()));
-				return;
-			}
-		}
 
 		static bool checkNickname(const std::string &nick);
 	};

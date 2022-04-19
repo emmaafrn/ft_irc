@@ -4,31 +4,29 @@
 #include <set>
 #include <map>
 
+#include <vector>
+
 #include <stdexcept>
 
 #include "Forward.hpp"
 
 #include <internal/Forward.hpp>
 #include <internal/Message.hpp>
+#include <util/Optional.hpp>
 
 namespace data {
 	class Channel {
 	public:
 		enum ChannelMode {
-															// Flags
+															// Flags	Status
 			CMODE_NONE							= 0x000,
-			CMODE_OPERATOR						= 0x001,	// o
-			CMODE_PRIVATE						= 0x002,	// p
-			CMODE_SECRET						= 0x004,	// s
-			CMODE_INVITE						= 0x008,	// i
-			CMODE_TOPIC_OP_ONLY					= 0x010,	// t
-			CMODE_NO_OUTSIDE_CLIENT				= 0x020,	// n
-			CMODE_MODERATED						= 0x040,	// m
-			CMODE_LIMIT							= 0x080,	// l
-			CMODE_BAN							= 0x100,	// b
-			CMODE_SPEAK_ON_MODERATED_CHANNEL	= 0x200,	// v
-			CMODE_PASSWORD						= 0x400,	// k
-			CMODE_END							= 0x800
+			CMODE_OPERATOR						= 0x001,	// o		SUPPORTED
+			CMODE_INVITE						= 0x002,	// i		SUPPORTED
+			CMODE_TOPIC_OP_ONLY					= 0x004,	// t		SUPPORTED
+			CMODE_BAN							= 0x008,	// b		SUPPORTED
+			CMODE_END							= (CMODE_BAN << 1)
+			// CMODE_PRIVATE					= 0x002,	// p		TO REMOVE
+			// CMODE_SECRET						= 0x004,	// s		TO REMOVE
 		};
 
 		typedef ChannelMode Mode;
@@ -39,6 +37,9 @@ namespace data {
 		std::string mName;
 		internal::ServerPtr mServer;
 		user_storage mUsers;
+		std::set<std::string> mBanList;
+		std::set<std::string> mInviteList;
+		std::string mTopic;
 		ChannelMode mMode;
 
 	public:
@@ -54,6 +55,7 @@ namespace data {
 		void setOperator(UserPtr user, bool op) throw(std::out_of_range);
 		bool isOperator(UserPtr user) const throw(std::out_of_range);
 
+		void admitMode(UserPtr sender, std::string mode, bool addMode, std::vector<std::string> params);
 		bool setMode(ChannelMode mode, bool addMode);
 		ChannelMode getMode() const;
 		std::string getModeString() const;
@@ -61,12 +63,27 @@ namespace data {
 		static char getModeChar(ChannelMode mode);
 		static ChannelMode getMode(char c);
 
+		std::string getTopic() const;
+		void setTopic(std::string &topic);
+		void topicMessage(UserPtr user, util::Optional<std::string> topic = util::Optional<std::string>());
+
 		bool userJoin(UserPtr user);
-		void userDisconnected(UserPtr user);
+		void userDisconnected(UserPtr user, std::string message);
+
+		void partMessage(UserPtr user, std::string name);
+		void whoMessage(UserPtr user, std::string name);
+		void namesMessage(UserPtr user);
+		void inviteMessage(UserPtr user, std::string nickname, UserPtr target);
+		void kickMessage(UserPtr user, std::vector<std::string> targets, std::string &comment);
+		void answerList(UserPtr user) const;
+
+		bool isInChannel(UserPtr user) const;
 
 		bool sendMessage(UserPtr sender, internal::Message message);
 
 		bool kickUser(UserPtr kicked);
+
+		void userWillRename(UserPtr user, std::string newNick);
 	};
 
 	Channel::ChannelMode operator|(Channel::ChannelMode cm0, Channel::ChannelMode cm1);

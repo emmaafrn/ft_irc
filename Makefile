@@ -1,4 +1,4 @@
-.PHONY:	all re clean fclean distclean test FORCE
+.PHONY:	all re clean fclean distclean bonus test FORCE
 .SUFFIX: .cpp .o
 
 NAME :=	ircserv
@@ -9,12 +9,24 @@ TEST_SRCS := test/test.cpp
 SRCS =
 
 include src/api/Include.mk
-include src/emma/Include.mk
+include src/network/Include.mk
 include src/internal/Include.mk
 include src/data/Include.mk
 include src/util/Include.mk
 
-INCS :=
+INCS :=	inc/api/IComm.hpp \
+	inc/api/Interface.hpp \
+	inc/data/Channel.hpp \
+	inc/data/Forward.hpp \
+	inc/data/User.hpp \
+	inc/network/Msg_manager.hpp \
+	inc/network/Parsing.hpp \
+	inc/internal/Forward.hpp \
+	inc/internal/Message.hpp \
+	inc/internal/Origin.hpp \
+	inc/internal/Server.hpp \
+	inc/util/Optional.hpp \
+	inc/util/Util.hpp \
 
 SRCS_DIR := src
 OBJS_DIR := .objs
@@ -34,11 +46,12 @@ TEST_OBJS := $(addprefix $(OBJS_DIR)/, $(TEST_SRCS:.cpp=.o))
 
 
 all:		$(NAME)
+bonus:		all
 
 $(NAME):	$(OBJS) $(BUILD_OBJS)
 	$(LD) $(LD_FLAGS) -o $@ $(OBJS)  $(BUILD_OBJS)
 
-$(OBJS_DIR)/%.o: %.cpp	$(INCS) Makefile
+$(OBJS_DIR)/%.o: %.cpp Makefile $(INCS)
 	@$(MKDIR) -p $(dir $@)
 	$(CXX) $(CXX_FLAGS) -c -o $@ $<
 
@@ -52,10 +65,10 @@ distclean:	fclean
 
 re: distclean all
 
-
-test: FORCE $(OBJS) $(TEST_OBJS)
+compile_test: FORCE $(OBJS) $(TEST_OBJS)
 	$(LD) $(LD_FLAGS) -o $(OBJS_DIR)/test_exec $(OBJS) $(TEST_OBJS)
 
+test: compile_test
 	$(OBJS_DIR)/test_exec
 
 	$(RM) $(OBJS_DIR)/test_exec

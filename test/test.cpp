@@ -36,7 +36,7 @@ struct MessageReceiver: api::IComm {
 
 	std::map< int, std::vector<Message> > msgs;
 
-	virtual bool sendMessage(int fd, util::Optional<internal::Origin> prefix, std::string command, std::vector<std::string> params, bool) {
+	virtual bool stockMessage(int fd, util::Optional<internal::Origin> prefix, std::string command, std::vector<std::string> params, bool) {
 		if (command != "PRIVMSG" && command != "NOTICE") {
 			return true;
 		}
@@ -90,8 +90,6 @@ bool test_user() {
 		new_op test_assert_equal(user.getUsername().empty(), true);
 		new_op test_assert_equal(user.getRealname().empty(), true);
 		new_op test_assert_equal(user.isAuthenticated(), false);
-		new_op test_assert_equal(user.isOperator(), false);
-		new_op test_assert_equal(user.getMode(), data::User::UMODE_NONE);
 
 		// Testing setters
 		new_op user.setNickname("MDR0");
@@ -124,11 +122,6 @@ bool test_user() {
 		new_op test_assert_true(user.isAuthenticated());
 		new_op user.setAuthenticated(false);
 		new_op test_assert_equal(user.isAuthenticated(), false);
-
-		new_op user.setMode(data::User::UMODE_INVISIBLE | data::User::UMODE_OPERATOR, true);
-		new_op test_assert_equal(user.getMode(), data::User::UMODE_INVISIBLE | data::User::UMODE_OPERATOR);
-		new_op user.setMode(data::User::UMODE_INVISIBLE, false);
-		new_op test_assert_equal(user.getMode(), data::User::UMODE_OPERATOR);
 
 		new_op test_assert_equal(user.kickedFromChannel(NULL), false);
 		new_op test_assert_equal(user.kickedFromChannel(reinterpret_cast<data::ChannelPtr>(0xDEADBEAF)), false);
@@ -209,7 +202,7 @@ bool test_channel() {
 		new_op test_assert_equal(receiver.hasMessage(-1), false);
 
 		new_op test_assert_equal(channel.sendMessage(otherUser, internal::Message(internal::Origin("AdMiN"), "MSG 2 OUF")), false);
-		new_op test_assert_equal(channel.sendMessage(reinterpret_cast<data::UserPtr>(0xDEADBEEF), internal::Message(internal::Origin("AdMiN"), "MSG 2 OUF")), false);
+		new_op test_assert_equal(channel.sendMessage(reinterpret_cast<data::UserPtr>(0xDEADBEEF), internal::Message(internal::Origin("AdMiN"), "MSG 2 OUF", true)), false);
 
 		new_op test_assert_equal(channel.userJoin(otherUser), true);
 
@@ -295,15 +288,220 @@ bool test_server() {
 	return true;
 }
 
+struct PackedMessage {
+	int fd;
+	util::Optional<internal::Origin> prefix;
+	std::string command;
+	std::vector<std::string> parameters;
+	bool lastParamExtended;
+
+	bool equivalent(int fd, internal::Origin origin, std::string command, std::vector<std::string> parameters = std::vector<std::string>()) {
+		return fd = this->fd && origin == *(this->prefix) && command == this->command && parameters == this->parameters;
+	}
+};
+
+struct RealReceiver: public api::IComm {
+	std::vector<PackedMessage> messages;
+
+	RealReceiver() {}
+
+	virtual bool stockMessage(int fd, util::Optional<internal::Origin> prefix, std::string command, std::vector<std::string> parameters, bool lastParamExtended) {
+		messages.push_back((PackedMessage){.fd = fd, .prefix = prefix, .command = command, .parameters = parameters, .lastParamExtended = lastParamExtended});
+		std::cout << ">> " << (prefix ? (":" + prefix->toString()) : "") << " " << command;
+
+		for (std::size_t i = 0; i < parameters.size(); ++i) {
+
+			std::cout << " ";
+			if (lastParamExtended && i + 1 == parameters.size()) {
+				std::cout << ":";
+			}
+
+			std::cout << parameters[i];
+		}
+
+		std::cout << std::endl;
+
+		return true;
+	}
+
+	PackedMessage &at(std::size_t index) {
+		return messages.at(messages.size() - 1 - index);
+	}
+
+	PackedMessage &operator[](std::size_t index) {
+		return messages[messages.size() - 1 - index];
+	}
+
+	std::size_t size() {
+		return messages.size();
+	}
+};
+
+bool test_realcase0() {
+	test_prelude
+
+	RealReceiver receiver = RealReceiver();
+	internal::Server server("POUPOU", &receiver);
+	data::UserPtr user;
+
+	std::size_t msgCount = 0;
+
+	// HEXCHAT DROP TEST
+
+	new_op test_assert_not_equal(user = server.addUser(2), NULL);
+
+	new_op server.admitMessage(user->getFd(), "CAP", util::makeVector<std::string>("LS"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+
+	new_op server.admitMessage(user->getFd(), "PASS", util::makeVector<std::string>("POUPOU"));
+	new_op test_assert_equal(receiver.size(), msgCount);
+
+	new_op server.admitMessage(user->getFd(), "NICK", util::makeVector<std::string>("nick"));
+	new_op test_assert_equal(receiver.size(), msgCount);
+
+	new_op server.admitMessage(user->getFd(), "USER", util::makeVector<std::string>("user", "clsaad", "localhost", "realname"));
+	new_op test_assert_equal(receiver.size(), msgCount += 7);
+
+	new_op server.admitMessage(user->getFd(), "PING", util::makeVector<std::string>("LAG1647996256762"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), server.getHost(), "PONG", util::makeVector<std::string>(server.getHost(), "LAG1647996256762")));
+
+	new_op server.admitMessage(user->getFd(), "PING", util::makeVector<std::string>("LAG1647996286831"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), server.getHost(), "PONG", util::makeVector<std::string>(server.getHost(), "LAG1647996286831")));
+
+	new_op server.admitMessage(user->getFd(), "PING", util::makeVector<std::string>("LAG1647996316899"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), server.getHost(), "PONG", util::makeVector<std::string>(server.getHost(), "LAG1647996316899")));
+
+	new_op server.admitMessage(user->getFd(), "PING", util::makeVector<std::string>("LAG1647996346970"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), server.getHost(), "PONG", util::makeVector<std::string>(server.getHost(), "LAG1647996346970")));
+
+	new_op server.admitMessage(user->getFd(), "JOIN", util::makeVector<std::string>("#test"));
+	new_op test_assert_equal(receiver.size(), msgCount += 4);
+	new_op test_assert_true(receiver.at(3).equivalent(user->getFd(), user->getOrigin(), "JOIN", util::makeVector<std::string>("#test")));
+	new_op test_assert_true(receiver.at(2).equivalent(user->getFd(), server.getHost(), "331", util::makeVector<std::string>(user->getNickname(), "#test", "No topic is set")));
+	new_op test_assert_true(receiver.at(1).equivalent(user->getFd(), server.getHost(), "353", util::makeVector<std::string>(user->getNickname(), "=", "#test", "@" + user->getNickname())));
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), server.getHost(), "366", util::makeVector<std::string>(user->getNickname(), "#test", "End of NAMES list")));
+
+	new_op server.admitMessage(user->getFd(), "MODE", util::makeVector<std::string>("#test"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), server.getHost(), "324", util::makeVector<std::string>(user->getNickname(), "#test", "+")));
+
+	new_op server.admitMessage(user->getFd(), "WHO", util::makeVector<std::string>("#test"));
+	new_op test_assert_equal(receiver.size(), msgCount += 2);
+	new_op test_assert_true(receiver.at(1).equivalent(user->getFd(), server.getHost(), "352",
+		util::makeVector<std::string>(user->getNickname(), "#test", "user", "localhost", server.getHost(), user->getNickname(), "H@", "0 " + user->getRealname())));
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), server.getHost(), "315", util::makeVector<std::string>(user->getNickname(), "#test", "End of WHO list")));
+
+	new_op server.admitMessage(user->getFd(), "PING", util::makeVector<std::string>("LAG1647996377045"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), server.getHost(), "PONG", util::makeVector<std::string>(server.getHost(), "LAG1647996377045")));
+
+	new_op server.admitMessage(user->getFd(), "PRIVMSG", util::makeVector<std::string>("#test", "Saluuuut"));
+	new_op test_assert_equal(receiver.size(), msgCount);
+
+	new_op server.admitMessage(user->getFd(), "PING", util::makeVector<std::string>("LAG1647996407118"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), server.getHost(), "PONG", util::makeVector<std::string>(server.getHost(), "LAG1647996407118")));
+
+	new_op server.admitMessage(user->getFd(), "PART", util::makeVector<std::string>("#test", "Leaving"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver.at(0).equivalent(user->getFd(), user->getOrigin(), "PART", util::makeVector<std::string>("#test", "Leaving")));
+
+	new_op test_assert_equal(server.getChannel("#test"), NULL);
+
+	// ERROR TESTING
+
+	/// JOIN
+	new_op server.admitMessage(user->getFd(), "JOIN", util::makeVector<std::string>("invalid"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "403", util::makeVector<std::string>(user->getNickname(), "invalid", "No such channel")));
+
+	new_op server.admitMessage(user->getFd(), "JOIN", util::makeVector<std::string>("#"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "403", util::makeVector<std::string>(user->getNickname(), "#", "No such channel")));
+
+	// TODO: MORE JOIN TESTS
+
+	/// PRIVMSG/NOTICE
+	new_op server.admitMessage(user->getFd(), "PRIVMSG", util::makeVector<std::string>("#test", "Saluuuut"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "401", util::makeVector<std::string>(user->getNickname(), "#test", "No such nick/channel")));
+
+	new_op server.admitMessage(user->getFd(), "NOTICE", util::makeVector<std::string>("#test", "Saluuuut"));
+	new_op test_assert_equal(receiver.size(), msgCount);
+
+	new_op server.admitMessage(user->getFd(), "PRIVMSG", util::makeVector<std::string>("nouserlmao", "Saluuuut"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "401", util::makeVector<std::string>(user->getNickname(), "nouserlmao", "No such nick/channel")));
+
+	new_op server.admitMessage(user->getFd(), "NOTICE", util::makeVector<std::string>("nouserlmao", "Saluuuut"));
+	new_op test_assert_equal(receiver.size(), msgCount);
+
+	new_op server.admitMessage(user->getFd(), "PRIVMSG", util::makeVector<std::string>("nouserlmao"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "412", util::makeVector<std::string>(user->getNickname(), "No text to send")));
+
+	new_op server.admitMessage(user->getFd(), "NOTICE", util::makeVector<std::string>("nouserlmao"));
+	new_op test_assert_equal(receiver.size(), msgCount);
+
+	new_op server.admitMessage(user->getFd(), "PRIVMSG", util::makeVector<std::string>("nouserlmao", ""));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "412", util::makeVector<std::string>(user->getNickname(), "No text to send")));
+
+	new_op server.admitMessage(user->getFd(), "NOTICE", util::makeVector<std::string>("nouserlmao", ""));
+	new_op test_assert_equal(receiver.size(), msgCount);
+
+	new_op server.admitMessage(user->getFd(), "PRIVMSG", util::makeVector<std::string>(""));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "411", util::makeVector<std::string>(user->getNickname(), "No recipient given (PRIVMSG)")));
+
+	new_op server.admitMessage(user->getFd(), "NOTICE", util::makeVector<std::string>(""));
+	new_op test_assert_equal(receiver.size(), msgCount);
+
+	new_op server.admitMessage(user->getFd(), "PRIVMSG", util::makeVector<std::string>());
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "411", util::makeVector<std::string>(user->getNickname(), "No recipient given (PRIVMSG)")));
+
+	new_op server.admitMessage(user->getFd(), "NOTICE", util::makeVector<std::string>());
+	new_op test_assert_equal(receiver.size(), msgCount);
+
+	// TODO: add more PRIVMSG/NOTICE test with channels
+
+	/// PING/PONG
+
+	new_op server.admitMessage(user->getFd(), "PING", util::makeVector<std::string>());
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "409", util::makeVector<std::string>(user->getNickname(), "No origin specified")));
+
+	new_op server.admitMessage(user->getFd(), "PING", util::makeVector<std::string>("TESTPING0", ""));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "402", util::makeVector<std::string>(user->getNickname(), "", "No such server")));
+
+	new_op server.admitMessage(user->getFd(), "PING", util::makeVector<std::string>("TESTPING1", "not.our.server"));
+	new_op test_assert_equal(receiver.size(), msgCount += 1);
+	new_op test_assert_true(receiver[0].equivalent(user->getFd(), server.getHost(), "402", util::makeVector<std::string>(user->getNickname(), "not.our.server", "No such server")));
+
+	return true;
+}
+
 int main(int argc, char *argv[]) {
 	(void)argc;
 	(void)argv;
 
-	// std::signal(SIGSEGV, handle_sigs);
+#if !(__has_feature(address_sanitizer))
+	std::cout << "AddressSanitizer disabled, handling signal manually" << std::endl;
+	std::signal(SIGSEGV, handle_sigs);
+#else
+	std::cout << "AddressSanitizer enabled" << std::endl;
+#endif
 
 	EXEC_TEST(test_user)
 	EXEC_TEST(test_channel)
 	EXEC_TEST(test_server)
+	EXEC_TEST(test_realcase0)
 
 	return 0;
 }

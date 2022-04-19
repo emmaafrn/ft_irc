@@ -1,18 +1,19 @@
 #include <util/Util.hpp>
+#include <internal/Server.hpp>
 
 namespace util {
 	std::vector<std::string> parseList(std::string list) {
 		std::vector<std::string> members;
 
-		for (std::size_t pos = 0; list.find(',') != std::string::npos;) {
+		for (std::size_t pos; (pos = list.find(',')) != std::string::npos;) {
 			members.push_back(list.substr(0, pos));
-			list.erase(0, pos + 1);
+			list = list.erase(0, pos + 1);
+		}
+
+		if (!list.empty()) {
+			members.push_back(list);
 		}
 
 		return members;
-	}
-
-	bool sendNumericReply(api::IComm *comm, data::UserPtr user, std::string code, std::vector<std::string> params) {
-		return comm->sendMessage(user->getFd(), internal::Origin(), code, params, true);
 	}
 } // namespace util
